@@ -11,8 +11,8 @@ type Transaction struct{
 	From string `gorm:"type:char(42);index"`
 	To string `gorm:"type:char(42);index"`
 	Method string `gorm:"type:varchar(64)"`
-	BlockNum unit64 `gorm:"index"`
-	LogIndex unit `gorm:"index"`
-	ChainID unit64 `gorm:"index"`
+	BlockNum uint64 `gorm:"index"`
+	LogIndex uint `gorm:"index"`
+	ChainID uint64 `gorm:"index"`
 	Timestamp time.Time
 }
