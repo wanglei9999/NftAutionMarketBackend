@@ -4,7 +4,7 @@ package database
 import (
 	"log"
 	"time"
-	"github.com/waglei9999/NftAutionMarketBackend/model"
+	"NftAutionMarketBackend/model"
 	"gorm.io/gorm"
 	"gorm.io/driver/mysql"
 )
