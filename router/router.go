@@ -41,8 +41,34 @@ func InitRouter() *gin.Engine{
 
 	authGroup := r.Group("/auth")
 	{
+		//获取nonce请求
+		authGroup.Post("/nonce",userController.GetNonceHandler)
+
+		//登录获取token
+		auth.Post("login",userController.LoginHandler)
 
 	}
+
+
+
+	//拍卖控制器
+	auctionController := controller.NewAuctionController()
+    apiGroup := r.Group("/api")
+	apiGroup.Use(middleware.AuthMiddleware){
+		//获取拍卖列表
+		api.GET("/auctions", auctionController.GetAuctions)
+		//获取某个拍卖的出价列表
+		api.GET("/auctions/:id/bids", auctionController.GetAuctionBids)
+		//获取拍卖总数和出价总数
+		api.GET("/stats", auctionController.GetPlatformStats)
+		//获取某个用户地址拥有的NFT
+		api.GET("/nfts/:address", auctionController.GetNFTsByAddress)
+		api.GET("/nfts/moralis/:address", auctionController.GetNFTsByAddressByMoralis)
+
+
+	}
+
+	return r
 
 }
 
