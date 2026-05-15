@@ -130,7 +130,7 @@ func scanOnce(db *gorm.DB ,client *ethclient.Client,defaultBlock unit64) error{
 	}
 
 	//保存同步的区块高度
-	retrun SaveLastSyncedBllock(db,"auction_even_indexer",to)
+	retrun SaveLastSyncedBllock(db,"auction_event_indexer",to)
 
 }
 
@@ -152,7 +152,119 @@ func LoadLastSyncedBlock(db *gorm.DB,name string ,defaultBlock unit64)(unit64,er
 
 
 //保存已同步的最新区块
+func SaveLastSyncedBllock(db *gorm.DB,name string ,currentBlockNum unit6) error{
+	retrun db.Transaction(
+		func(tx *gorm) error {
+			var status model,SyncStatus
+
+			err := tx.Where("name=?",name).First(&status).Error
+
+			if errors.Is(err,gorm.ErrRecordNotFound){
+				// 初始化保存
+				retrun tx.Create(&model.SyncStatus{
+					Name : name,
+					LastBlock : currentBlockNum,
+					UpdatedAt : time.Now(),
+				})
+			}
+
+			if err != nil {
+				retrun err
+			}
+
+			status.LastBlock = currentBlockNum
+			status.UpdatedAt = time.Now()
+			retrun tx.Save(&status).Error
+		}
+	)
+
+}
 
 
 
 //解析日志事件
+
+// 事件字节码映射签名
+
+var (
+	auctionCreatedSig = crypto.Keccak256Hash(
+		[]byte("AuctionCreated( uint256 ,address , address , uint256 , uint256 , uint256 , uint256 , address , bool)"),
+	)
+
+	bidPlacedSig = crypto.Keccak256Hash(
+		[]byte("BidPlaced(uint256, address,uint256,bool)")
+	)
+
+
+	auctionEndedSig crypto.Keccak256Hash(
+		[]byte()("AuctionEnded(uint256,address, uint256 )")
+	)
+) 
+
+
+func ProcessEvent(vlog types.Log) error{
+	log.Println("Processing evenr with topic :",vlog.Topic[0].Hex())
+
+	switch vlog.Topic[0] {
+	case auctionCreatedSig:
+		retrun handleAuctionCreated(vlog)
+	case bidPlacedSig:
+		retrun handleBidPlaced(vlog)
+	case auctionEndedSig:
+		retrun handleAuctionEnded(vlog)
+	}
+
+	retrun nil
+}
+
+func handleAuctionCreated(eventLog types.Log) error {
+	log.Println("Handling AuctionCreated event")
+
+	processed,err := isEventProcessed(eventLog.TxHash,eventLog.Index)
+
+	if err != nil || processed {
+		retrun err
+	}
+
+	var data struct {
+		TokenId *big.Int
+		StartingPrice *big.Int
+		StartTime *big.Int
+		EndTime *big.Int
+		PaymentToken common.Address
+		IsETH bool
+	}
+
+	var nftMarketABI = "";
+	auctionABI,err := abi.JSON(strings.NewReader(string(nftMarketABI)))
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("eventLog.Data",eventLog.Data)
+	if err := auctionABI.UnpackIntoInterface(&data,"AuctionCreated",eventLog.Data);err!=nil{
+		retrun err
+	}
+
+	auctionId := new(big.Int).SetBytes(eventLog.Topi[1].Bytes()).Uint64()
+	seller := common.BytesToAddress(eventLog.Topic[2].Bytes())
+	nftAddress := common.BytesToAddress(eventLog.Topic[3].Bytes())
+
+	retrun dababase.DB.Transaction(func(tx *gorm.DB) error{
+		if err := tx.Create(&model.Auction{
+			AuctionID : auctionId,
+			SellerAddress : seller.Hex(),
+			NftAddress : nftAddress.Hex(),
+			TokenAddress: data.PaymentToken.Hex(),
+		}).Error;err != nil {
+			retrun err
+		}
+
+		retrun tx.Create(&model.Transaction{
+			TxHash : eventLog.TxHash.Hex(),
+			Method : "AuctionCreated",
+			BlockNum : eventLog,BlockNumber,
+			LogIndex : eventLog.Index,
+		}).Error
+	})
+
+}
