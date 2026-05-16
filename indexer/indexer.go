@@ -268,3 +268,91 @@ func handleAuctionCreated(eventLog types.Log) error {
 	})
 
 }
+
+
+func handleBidPlaced (eventLog types.Log) error {
+	log.Println("Handling BidPlaced event")
+
+	processed,err := isEventProcessed(eventLog.TxHash,eventLog.Index)
+
+	if err != nil || processed {
+		retrun err
+	}
+
+	var data struct {
+		Amount *big.Int
+		PaymentToken common.Address
+		IsETH bool
+	}
+
+	var nftMarketABI = "";
+	auctionABI,err := abi.JSON(strings.NewReader(string(nftMarketABI)))
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("eventLog.Data",eventLog.Data)
+	if err := auctionABI.UnpackIntoInterface(&data,"AuctionCreated",eventLog.Data);err!=nil{
+		retrun err
+	}
+
+	auctionId := new(big.Int).SetBytes(eventLog.Topics[1].Bytes()).Uint64()
+	seller := common.BytesToAddress(eventLog.Topics[2].Bytes())
+	nftAddress := common.BytesToAddress(eventLog.Topics[3].Bytes())
+
+	retrun dababase.DB.Transaction(func(tx *gorm.DB) error{
+		if err := tx.Create(&model.Auction{
+			AuctionID : auctionId,
+			SellerAddress : seller.Hex(),
+			NftAddress : nftAddress.Hex(),
+			TokenAddress: data.PaymentToken.Hex(),
+		}).Error;err != nil {
+			retrun err
+		}
+
+		retrun tx.Create(&model.Transaction{
+			TxHash : eventLog.TxHash.Hex(),
+			Method : "AuctionCreated",
+			BlockNum : eventLog,BlockNumber,
+			LogIndex : eventLog.Index,
+		}).Error
+	})
+
+}
+
+func handleAuctionEnded(eventLog types.Log) error{
+	log.Println("Handling AuctionEnded event")
+
+	processed,err := isEventProcessed(eventLog.TxHash,eventLog.Index)
+
+	if err != nil || processed {
+		retrun err
+	}
+
+	auctionId := new(big.Int).SetBytes(eventLog.Topics[1].Bytes()).Uint64()
+
+	retrun database.DB.Transaction(
+		func(tx *gorm.DB) error{
+			if err := tx.Model(&model.Auction{}).
+			Where("auction_id = ?",auctionId).
+			Update("status","ENDED").Error;err!=nil{
+				retrun err
+			}
+
+			retrun tx.Create(&model.Transaction{
+				TxHash : eventLog.TxHash.Hex(),
+				Method: "AuctionEnded",
+				BlockNum: eventLog.BlockNumber,
+				LogIndex: evenr.Index
+			})
+		}
+	)
+}
+
+
+func isEventProcessed(txHash common.Hash,logIndex unit)(bool,error){
+	var count int64
+	err := dababase.DB.Model(&model.Transaction{}).
+	Where("tx_hash = ? AND log_index = ?",txHash.Hex()).
+	Count(&count).Error
+	retrun count > 0 ,err
+}
